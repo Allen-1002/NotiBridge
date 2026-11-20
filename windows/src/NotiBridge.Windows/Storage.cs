@@ -57,6 +57,8 @@ public sealed class AppSettings
     /// <summary>发现新版本后自动下载并安装</summary>
     public bool UpdateAutoInstall { get; set; } = true;
     public SyncFilter Filter { get; set; } = new();
+    /// <summary>电脑上已打开同一应用时不重复提醒（只存在本机，不同步给手机）</summary>
+    public DesktopDuplicateSettings DesktopDuplicates { get; set; } = new();
     /// <summary>用户在电脑上给手机起的名字（deviceId -> 名字），只保存在本机</summary>
     public Dictionary<string, string> DeviceAliases { get; set; } = new();
 

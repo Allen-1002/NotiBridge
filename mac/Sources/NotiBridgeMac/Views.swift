@@ -139,6 +139,7 @@ struct ResultBadge: View {
             case "duplicate": return ("重复", .gray)
             case "filtered": return ("已过滤", .orange)
             case "paused": return ("已暂停", .gray)
+            case "skipped": return ("电脑已打开", .gray)
             case "copied": return ("已复制", .blue)
             default: return (result, .gray)
             }
@@ -738,6 +739,7 @@ struct SettingsView: View {
             } footer: {
                 Text("前三项与手机自动保持一致：在任意一端修改，另一端会在下次连接时同步（手机打开 NotiBridge 或来新通知时）。")
             }
+            DesktopDuplicatesSection()
             Section {
                 Picker("使用方式", selection: Binding(get: { model.esp32.mode }, set: { model.esp32.mode = $0 })) {
                     ForEach(UseMode.allCases) { m in Text(m.label).tag(m) }
@@ -795,6 +797,30 @@ struct SettingsView: View {
             Button("取消", role: .cancel) {}
         } message: {
             Text(Self.deletedItems + "\n\n然后 NotiBridge.app 会被移到废纸篓并退出。macOS 通知、蓝牙等权限记录由系统管理，可在“系统设置”中自行移除。")
+        }
+    }
+}
+
+/// 电脑上已打开同一应用时不重复提醒
+struct DesktopDuplicatesSection: View {
+    @EnvironmentObject var model: AppModel
+    @State private var expanded = false
+
+    var body: some View {
+        Section {
+            Toggle("电脑上已打开同一应用时不重复提醒", isOn: $model.desktopDuplicates.enabled)
+            DisclosureGroup("适用的应用", isExpanded: $expanded) {
+                ForEach(DesktopApps.builtIn, id: \.key) { app in
+                    Toggle(app.name, isOn: Binding(
+                        get: { model.desktopDuplicates.isOn(app.key) },
+                        set: { model.desktopDuplicates.set(app.key, on: $0) }))
+                }
+            }
+            .disabled(!model.desktopDuplicates.enabled)
+        } header: {
+            Text("避免重复提醒")
+        } footer: {
+            Text("比如 Mac 上开着微信时，手机转发来的微信通知不再弹出（仍会记在通知记录里，标为“电脑已打开”）。只在这台电脑上生效。")
         }
     }
 }

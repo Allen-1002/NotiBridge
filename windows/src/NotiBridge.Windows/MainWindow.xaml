@@ -525,6 +525,27 @@
                         </Border>
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
+                                <TextBlock Text="避免重复提醒" FontWeight="SemiBold" />
+                                <CheckBox Content="电脑上已打开同一应用时不重复提醒" IsChecked="{Binding SkipWhenDesktopAppOpen}" Margin="0,8,0,0" />
+                                <TextBlock Style="{StaticResource Hint}" Margin="0,6,0,0" TextWrapping="Wrap"
+                                           Text="比如电脑上开着微信时，手机转发来的微信通知不再弹出（仍会记在通知记录里，标为“电脑已打开”）。只在这台电脑上生效。" />
+                                <ItemsControl ItemsSource="{Binding DesktopAppItems}" Margin="20,8,0,0"
+                                              IsEnabled="{Binding SkipWhenDesktopAppOpen}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <CheckBox Content="{Binding Name}" IsChecked="{Binding IsOn}" Width="160" Margin="0,4,0,0" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
                                 <TextBlock Text="使用方式" FontWeight="SemiBold" />
                                 <RadioButton GroupName="UseModeSettings" IsChecked="{Binding Esp32.UseSoftware}" Content="纯软件：安卓、鸿蒙手机的通知" Margin="0,8,0,0" />
                                 <RadioButton GroupName="UseModeSettings" IsChecked="{Binding Esp32.UseEsp32}" Content="ESP32 模式：再加 iPhone 通知，以及在电脑上接打电话" Margin="0,4,0,0" />

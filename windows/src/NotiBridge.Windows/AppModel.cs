@@ -40,6 +40,23 @@ public sealed class DeviceItem : ObservableObject
         LastSeen is { } t ? $"待命 · 最近同步 {t.LocalDateTime:HH:mm}" : "待命（有通知时自动连接）");
 }
 
+/// <summary>设置页“避免重复提醒”里的一个应用</summary>
+public sealed class DesktopAppItem(DesktopAppSpec spec, DesktopDuplicateSettings settings, Action save) : ObservableObject
+{
+    public string Name => spec.Name;
+    public bool IsOn
+    {
+        get => settings.IsOn(spec.Key);
+        set
+        {
+            if (settings.IsOn(spec.Key) == value) return;
+            settings.Set(spec.Key, value);
+            save();
+            Raise();
+        }
+    }
+}
+
 public sealed class RecordItem : ObservableObject
 {
     private bool _showContent;
@@ -61,6 +78,7 @@ public sealed class RecordItem : ObservableObject
         "duplicate" => "重复",
         "filtered" => "已过滤",
         "paused" => "已暂停",
+        "skipped" => "电脑已打开",
         "copied" => "已复制",
         _ => Result,
     };
@@ -388,6 +406,34 @@ public sealed class AppModel : ObservableObject
     {
         get => _settings.QuietDuringCalls;
         set { _settings.QuietDuringCalls = value; _settings.Save(); Raise(); }
+    }
+
+    /// <summary>电脑上已打开同一应用时不重复提醒（总开关）</summary>
+    public bool SkipWhenDesktopAppOpen
+    {
+        get => _settings.DesktopDuplicates.Enabled;
+        set { _settings.DesktopDuplicates.Enabled = value; _settings.Save(); Raise(); }
+    }
+
+    private IReadOnlyList<DesktopAppItem>? _desktopApps;
+    /// <summary>可以单独开关的应用（内置对照表）</summary>
+    public IReadOnlyList<DesktopAppItem> DesktopAppItems => _desktopApps ??=
+        [.. DesktopApps.BuiltIn.Select(a => new DesktopAppItem(a, _settings.DesktopDuplicates, _settings.Save))];
+
+    /// <summary>这条通知对应的应用是否已在这台电脑上开着（开着就不弹）</summary>
+    private DesktopAppSpec? RunningDesktopApp(MirroredNotification n)
+    {
+        var dd = _settings.DesktopDuplicates;
+        if (!dd.Enabled || DesktopApps.Match(n.BundleName, n.AppName) == null) return null;
+        var running = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in Process.GetProcesses())
+        {
+            using (p)
+            {
+                try { running.Add(p.ProcessName); } catch (Exception) { /* 进程刚退出 */ }
+            }
+        }
+        return dd.SuppressingApp(n.BundleName, n.AppName, a => DesktopDuplicateSettings.IsRunningOnWindows(a, running));
     }
 
     public IReadOnlyList<string> RecentCalls => _settings.RecentCalls;
@@ -834,6 +880,12 @@ public sealed class AppModel : ObservableObject
                     result = "duplicate";
                     break;
                 default:
+                    if (RunningDesktopApp(n) is { } app)
+                    {
+                        result = "skipped";
+                        Log($"电脑上已打开{app.Name}，不重复提醒：{n.AppName}");
+                        break;
+                    }
                     if (HoldPopups) _heldDuringCall++;
                     else _notifier.Show(n, dev, DeviceName(dev), MultipleSources);
                     result = "shown";

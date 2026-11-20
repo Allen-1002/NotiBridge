@@ -72,6 +72,31 @@ final class AppModel: ObservableObject {
         didSet { UserDefaults.standard.set(quietDuringCalls, forKey: "quietDuringCalls") }
     }
     private var heldDuringCall = 0
+    /// 电脑上已打开同一应用时不重复提醒（只存在本机，不同步给手机）
+    @Published var desktopDuplicates: DesktopDuplicateSettings = AppModel.loadDesktopDuplicates() {
+        didSet {
+            if let data = try? JSONEncoder().encode(desktopDuplicates) {
+                UserDefaults.standard.set(data, forKey: "desktopDuplicates")
+            }
+        }
+    }
+    private static func loadDesktopDuplicates() -> DesktopDuplicateSettings {
+        guard let data = UserDefaults.standard.data(forKey: "desktopDuplicates"),
+              let s = try? JSONDecoder().decode(DesktopDuplicateSettings.self, from: data) else {
+            return DesktopDuplicateSettings()
+        }
+        return s
+    }
+    /// 这条通知对应的应用是否已在这台 Mac 上开着（开着就不弹）
+    private func runningDesktopApp(for n: MirroredNotification) -> DesktopAppSpec? {
+        guard desktopDuplicates.enabled, DesktopApps.match(bundleName: n.bundleName, appName: n.appName) != nil else {
+            return nil
+        }
+        let running = Set(NSWorkspace.shared.runningApplications.compactMap { $0.bundleIdentifier?.lowercased() })
+        return desktopDuplicates.suppressingApp(bundleName: n.bundleName, appName: n.appName) {
+            DesktopDuplicateSettings.isRunningOnMac($0, runningBundleIds: running)
+        }
+    }
     /// 最近通话的号码（新的在前，最多 20 个），拨号时可以直接选
     @Published var recentCalls: [String] = UserDefaults.standard.stringArray(forKey: "recentCalls") ?? [] {
         didSet { UserDefaults.standard.set(recentCalls, forKey: "recentCalls") }
@@ -450,7 +475,7 @@ final class AppModel: ObservableObject {
             defaults.removePersistentDomain(forName: id)
         }
         for key in ["onboarded", "paused", "filter", "port", "macId", "copyOtp", "settingsUpdatedAt",
-                    "hfpDevice", "deviceAliases", "useMode", "updateAutoCheck", "updateAutoInstall", "updatePendingVersion", "lastLaunchedVersion"] {
+                    "hfpDevice", "deviceAliases", "desktopDuplicates", "quietDuringCalls", "useMode", "updateAutoCheck", "updateAutoInstall", "updatePendingVersion", "lastLaunchedVersion"] {
             defaults.removeObject(forKey: key)
         }
         defaults.synchronize()
@@ -692,8 +717,13 @@ final class AppModel: ObservableObject {
             case .duplicate:
                 result = "duplicate"
             case .new, .updated:
-                if holdPopups { heldDuringCall += 1 } else { notifier.show(n, source: sourceLabel(deviceId)) }
-                result = "shown"
+                if let app = runningDesktopApp(for: n) {
+                    result = "skipped"
+                    log("Mac 上已打开\(app.name)，不重复提醒：\(n.appName)")
+                } else {
+                    if holdPopups { heldDuringCall += 1 } else { notifier.show(n, source: sourceLabel(deviceId)) }
+                    result = "shown"
+                }
             }
         }
         records.insert(ReceivedRecord(at: Date(), notification: n, result: result, deviceId: deviceId), at: 0)
